@@ -49,6 +49,10 @@
 (defn -main
   ([port dir]
      (rooms/add-rooms dir)
+     (Thread/sleep 1000)
+     (if-not (@rooms/rooms :start)
+       (println "ERROR: Start room not loaded!")
+       (println "Start room loaded successfully"))
      (defonce server (socket/create-server (Integer. port) mire-handle-client))
      (println "Launching Mire server on port" port))
   ([port] (-main port "resources/rooms"))
