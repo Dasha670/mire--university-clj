@@ -9,30 +9,43 @@
   (alter from disj obj)
   (alter to conj obj))
 
+(defn- generate-chest-coins []
+  "Generate random amount of coins for a chest (5 to 30)"
+  (+ 5 (rand-int 26)))
+
 ;; Command functions
 
 (defn look
   "Get a description of the surrounding environs and its contents."
   []
   (str (:desc @player/*current-room*)
-       "\nExits: " (keys @(:exits @player/*current-room*)) "\n"
-       (str/join "\n" (map #(str "There is " % " here.\n")
+       "\r\nExits: " (keys @(:exits @player/*current-room*)) "\r\n"
+       (str/join "\r\n" (map #(str "There is " % " here.\r\n")
                            @(:items @player/*current-room*)))))
 
 (defn move
-  "\"♬ We gotta get out of this place... ♪\" Give a direction."
+  "\"We gotta get out of this place...\" Give a direction."
   [direction]
   (dosync
-   (let [target-name ((:exits @player/*current-room*) (keyword direction))
-         target (@rooms/rooms target-name)]
-     (if target
-       (do
-         (move-between-refs player/*name*
-                            (:inhabitants @player/*current-room*)
-                            (:inhabitants target))
-         (ref-set player/*current-room* target)
-         (look))
+   (let [dir-key (if (string? direction) 
+                   (keyword direction) 
+                   direction)
+         current-room @player/*current-room*
+         exits @(:exits current-room)
+         target-name (exits dir-key)]
+     
+     (if (and target-name (not (nil? target-name)))
+       (let [target (@rooms/rooms target-name)]
+         (if target
+           (do
+             (move-between-refs player/*name*
+                                (:inhabitants current-room)
+                                (:inhabitants target))
+             (ref-set player/*current-room* target)
+             (look))
+           "You can't go that way."))
        "You can't go that way."))))
+
 
 (defn grab
   "Pick something up."
@@ -59,8 +72,11 @@
 (defn inventory
   "See what you've got."
   []
-  (str "You are carrying:\n"
-       (str/join "\n" (seq @player/*inventory*))))
+  (str "You are carrying:\r\n"
+       (str/join "\r\n" (seq @player/*inventory*))
+       "\r\n\nCoins: " (player/get-coins))) 
+
+
 
 (defn detect
   "If you have the detector, you can see which room an item is in."
@@ -71,6 +87,7 @@
       (str item " is in " (:name room))
       (str item " is not in any room."))
     "You need to be carrying the detector for that."))
+
 
 (defn say
   "Say something out loud so everyone in the room can hear."
@@ -83,6 +100,87 @@
         (println player/prompt)))
     (str "You said " message)))
 
+
+(defn coins
+  "Check your coin balance."
+  []
+  (str "You have " (player/get-coins) " coins."))
+
+(defn open-chest
+  "Open the chest in the room with a key."
+  []
+  (dosync
+   (if @(:has-chest @player/*current-room*)
+     (if (player/carrying? "keys")
+       (let [coins-found (generate-chest-coins)]
+         ;; Убираем ключ из инвентаря
+         (alter player/*inventory* disj :keys)
+         ;; Убираем сундук из комнаты
+         (ref-set (:has-chest @player/*current-room*) false)
+         ;; Добавляем монеты игроку
+         (player/add-coins coins-found)
+         (str "You opened the chest with a keys and found " 
+              coins-found " coins! The chest and key disappeared."))
+       "You need a kesy to open the chest.")
+     "There is no chest here.")))
+
+(defn sell
+  "Sell an item for coins"
+  [item]
+  (dosync
+   (if (player/carrying? item)
+     (let [price (cond
+                   (= item "bunny") 15
+                   (= item "turtle") 20
+                   :else 0)]
+       (if (> price 0)
+         (do
+           (alter player/*inventory* disj (keyword item))
+           (player/add-coins price)  ; ← Используем новую функцию
+           (str "Sold " item " for " price " coins. Total: " (player/get-coins)))
+         "You can't sell this item."))
+     (str "You're not carrying a " item "."))))
+
+(defn add-experience [amount]
+  "Add expirience"
+  (dosync
+   (alter player/*experience* + amount)
+   (while (>= @player/*experience* (* 10 @player/*level*))
+     (alter player/*experience* - (* 10 @player/*level*))
+     (alter player/*level* inc)
+     (str "Congratulations! You reached level " @player/*level* "!"))))
+
+(defn buy
+  "Buy experience potion for 20 coins"
+  []
+  (dosync
+   (let [current-coins (player/get-coins)]
+     (if (>= current-coins 20)
+       (do
+         (player/add-coins -20)
+         (add-experience 10)
+         (str "Bought experience potion! +10 XP. Coins left: " (player/get-coins)))
+       (str "Not enough coins! Need 20, have " current-coins)))))
+
+(defn shop
+  "Show shop prices"
+  []
+  (str "SHOP:\r\n"
+       "Sell prices:\r\n"
+       "  bunny   - 15 coins\r\n"
+       "  turtle  - 20 coins\r\n"
+       "\r\nBuy:\r\n"
+       "  XP Potion - 20 coins (+10 experience)\r\n"
+       "\r\nYour coins: " (player/get-coins)))
+
+(defn stats
+  "Show your character stats"
+  []
+  (str "Level: " @player/*level* "\r\n"
+       "Experience: " @player/*experience* "/" (* 10 @player/*level*) "\r\n"
+       "Coins: " (player/get-coins)))
+
+
 (defn help
   "Show available commands and what they do."
   []
@@ -90,9 +188,9 @@
                       (dissoc (ns-publics 'mire.commands)
                               'execute 'commands))))
 
-;; Command data
 
-(def commands {"move" move,
+
+(def commands (atom {"move" move,
                "north" (fn [] (move :north)),
                "south" (fn [] (move :south)),
                "east" (fn [] (move :east)),
@@ -103,7 +201,14 @@
                "detect" detect
                "look" look
                "say" say
-               "help" help})
+               "help" help
+               "coins" coins
+               "open-chest" open-chest
+               "stats" stats
+               "sell" sell
+               "buy" buy
+               "shop" shop}))
+
 
 ;; Command handling
 
@@ -112,10 +217,9 @@
   [input]
   (try 
     (let [[command & args] (.split input " +")
-          cmd-fn (get commands (.toLowerCase command))]
+          cmd-fn (get @commands (.toLowerCase command))]
       (if cmd-fn
         (apply cmd-fn args)
         (str "Unknown command. Type 'help' for commands.")))
     (catch Exception e
-      (.printStackTrace e (new java.io.PrintWriter *err*))
       "You can't do that!")))
