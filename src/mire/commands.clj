@@ -86,7 +86,7 @@
 (defn help
   "Show available commands and what they do."
   []
-  (str/join "\n" (map #(str (key %) ": " (:doc (meta (val %))))
+  (str/join "\r\n" (map #(str (key %) ": " (:doc (meta (val %))))
                       (dissoc (ns-publics 'mire.commands)
                               'execute 'commands))))
 
