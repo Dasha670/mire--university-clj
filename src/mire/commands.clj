@@ -110,8 +110,12 @@
 (defn execute
   "Execute a command that is passed to us."
   [input]
-  (try (let [[command & args] (.split input " +")]
-         (apply (commands command) args))
-       (catch Exception e
-         (.printStackTrace e (new java.io.PrintWriter *err*))
-         "You can't do that!")))
+  (try 
+    (let [[command & args] (.split input " +")
+          cmd-fn (get commands (.toLowerCase command))]
+      (if cmd-fn
+        (apply cmd-fn args)
+        (str "Unknown command. Type 'help' for commands.")))
+    (catch Exception e
+      (.printStackTrace e (new java.io.PrintWriter *err*))
+      "You can't do that!")))
