@@ -10,6 +10,7 @@
             :desc (:desc room)
             :exits (ref (:exits room))
             :items (ref (or (:items room) #{}))
+            :has-chest (ref (or (:has-chest room) false))
             :inhabitants (ref #{})}})))
 
 (defn load-rooms
