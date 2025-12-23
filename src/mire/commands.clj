@@ -128,7 +128,7 @@
          (player/add-coins coins-found)
          (str "You opened the chest with a keys and found " 
               coins-found " coins! The chest and key disappeared."))
-       "You need a kesy to open the chest.")
+       "You need a keys to open the chest.")
      "There is no chest here.")))
 
 (defn sell
@@ -186,6 +186,39 @@
   (str "Level: " @player/*level* "\r\n"
        "Experience: " @player/*experience* "/" (* 10 @player/*level*) "\r\n"
        "Coins: " (player/get-coins)))
+     
+
+(defn spawn-item
+  "Add an item to the current room if it belongs here (for bot use)."
+  [item]
+  (dosync
+   (let [room-name (:name @player/*current-room*)
+         item-key (keyword item)]
+     (cond
+       (= room-name :start)
+       (str "No items in start room.")
+       
+       (and (= room-name :hallway) (= item "detector"))
+       (if (not (rooms/room-contains? @player/*current-room* item))
+         (do (alter (:items @player/*current-room*) conj item-key)
+             (str "Spawned " item " in the hallway."))
+         (str item " is already in the hallway."))
+       
+       (and (= room-name :promenade) 
+            (or (= item "bunny") (= item "turtle")))
+       (if (not (rooms/room-contains? @player/*current-room* item))
+         (do (alter (:items @player/*current-room*) conj item-key)
+             (str "Spawned " item " in the promenade."))
+         (str item " is already in the promenade."))
+       
+       (and (= room-name :closet) (= item "keys"))
+       (if (not (rooms/room-contains? @player/*current-room* item))
+         (do (alter (:items @player/*current-room*) conj item-key)
+             (str "Spawned " item " in the closet."))
+         (str item " is already in the closet."))
+       
+       :else
+       (str item " doesn't belong in this room.")))))
 
 
 (defn help
@@ -214,7 +247,8 @@
                "stats" stats
                "sell" sell
                "buy" buy
-               "shop" shop}))
+               "shop" shop
+               "spawn-item" spawn-item}))
 
 
 ;; Command handling
