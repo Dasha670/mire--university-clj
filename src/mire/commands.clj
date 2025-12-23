@@ -82,23 +82,33 @@
   "If you have the detector, you can see which room an item is in."
   [item]
   (if (@player/*inventory* :detector)
-    (if-let [room (first (filter #((:items %) (keyword item))
-                                 (vals @rooms/rooms)))]
-      (str item " is in " (:name room))
-      (str item " is not in any room."))
-    "You need to be carrying the detector for that."))
+    (let [current-room @player/*current-room*
+          item-key (keyword item)]
+      (cond
+        (= item "chest")
+        (if (true? (:has-chest current-room))
+          (str "There is a chest in this room!")
+          "There is NO chest here.")
 
+        :else
+        (if ((:items current-room) item-key)
+          (str item " is in this room.")
+          (str item " is not in this room."))))
+    "You need to be carrying the detector for that."))
 
 (defn say
   "Say something out loud so everyone in the room can hear."
   [& words]
-  (let [message (str/join " " words)]
+  (let [message (str/join " " words)
+        formatted-message (str player/*name* ": " message)]
     (doseq [inhabitant (disj @(:inhabitants @player/*current-room*)
                              player/*name*)]
       (binding [*out* (player/streams inhabitant)]
-        (println message)
-        (println player/prompt)))
-    (str "You said " message)))
+        (print formatted-message)
+        (print "\r\n")
+        (print player/prompt)
+        (flush)))
+    (str "You said: " message)))
 
 
 (defn coins
@@ -113,11 +123,8 @@
    (if @(:has-chest @player/*current-room*)
      (if (player/carrying? "keys")
        (let [coins-found (generate-chest-coins)]
-         ;; Убираем ключ из инвентаря
          (alter player/*inventory* disj :keys)
-         ;; Убираем сундук из комнаты
          (ref-set (:has-chest @player/*current-room*) false)
-         ;; Добавляем монеты игроку
          (player/add-coins coins-found)
          (str "You opened the chest with a keys and found " 
               coins-found " coins! The chest and key disappeared."))
@@ -136,7 +143,7 @@
        (if (> price 0)
          (do
            (alter player/*inventory* disj (keyword item))
-           (player/add-coins price)  ; ← Используем новую функцию
+           (player/add-coins price)
            (str "Sold " item " for " price " coins. Total: " (player/get-coins)))
          "You can't sell this item."))
      (str "You're not carrying a " item "."))))
